@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
+build/
+dist/
+*.spec
+BrowserNetworkRecorder/
+network_capture_output/
+assets/
+*.jsonl
+.env

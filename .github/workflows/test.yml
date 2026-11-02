@@ -1,0 +1,25 @@
+name: Tests
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+        python: ['3.11', '3.12', '3.13']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -r requirements.txt websockets
+      - run: python -m unittest discover -s tests -v
+      - name: Real Chrome integration test
+        if: matrix.python == '3.12'
+        env:
+          RECORDER_INTEGRATION: '1'
+        run: python -m unittest discover -s tests -v
+      - run: python -m compileall -q network_capture.py privacy.py assets.py bootstrap.py build.py

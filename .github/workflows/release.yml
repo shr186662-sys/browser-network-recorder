@@ -1,0 +1,64 @@
+name: Build desktop apps
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            name: mac-arm64
+          - os: macos-15-intel
+            name: mac-intel
+          - os: windows-latest
+            name: windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt pyinstaller
+      - run: python -m unittest discover -s tests -v
+      - run: python build.py
+      - name: Smoke test macOS app
+        if: runner.os == 'macOS'
+        run: |
+          dist/BrowserNetworkRecorder.app/Contents/MacOS/BrowserNetworkRecorder --self-check smoke.txt
+          test "$(cat smoke.txt)" = "ok"
+      - name: Smoke test Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath dist/BrowserNetworkRecorder/BrowserNetworkRecorder.exe -ArgumentList "--self-check", "smoke.txt" -Wait -PassThru
+          if ($process.ExitCode -ne 0 -or !(Test-Path smoke.txt) -or (Get-Content smoke.txt) -ne "ok") { throw "Desktop smoke test failed" }
+      - name: Archive macOS app
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent dist/BrowserNetworkRecorder.app BrowserNetworkRecorder-${{ matrix.name }}.zip
+      - name: Archive Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/BrowserNetworkRecorder -DestinationPath BrowserNetworkRecorder-${{ matrix.name }}.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BrowserNetworkRecorder-${{ matrix.name }}
+          path: BrowserNetworkRecorder-${{ matrix.name }}.zip
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" artifacts/*.zip --title "$GITHUB_REF_NAME" --notes "Standalone desktop builds for macOS and Windows. Chrome and internet for initial driver setup are required. Builds are unsigned. See README for privacy and compatibility limitations."
