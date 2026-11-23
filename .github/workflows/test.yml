@@ -17,9 +17,22 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install -r requirements.txt websockets
       - run: python -m unittest discover -s tests -v
-      - name: Real Chrome integration test
+      - name: Real browser integration tests
         if: matrix.python == '3.12'
         env:
           RECORDER_INTEGRATION: '1'
         run: python -m unittest discover -s tests -v
       - run: python -m compileall -q network_capture.py privacy.py assets.py bootstrap.py build.py
+      - name: Build and smoke test Windows app
+        if: runner.os == 'Windows' && matrix.python == '3.12'
+        shell: pwsh
+        run: |
+          python -m pip install pyinstaller
+          python build.py
+          $process = Start-Process -FilePath dist/BrowserNetworkRecorder/BrowserNetworkRecorder.exe -ArgumentList "--self-check", "smoke.txt" -Wait -PassThru
+          if ($process.ExitCode -ne 0 -or !(Test-Path smoke.txt) -or (Get-Content smoke.txt) -ne "ok") { throw "Desktop smoke test failed" }
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows' && matrix.python == '3.12'
+        with:
+          name: BrowserNetworkRecorder-windows-x64
+          path: dist/BrowserNetworkRecorder/

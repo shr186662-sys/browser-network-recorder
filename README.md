@@ -1,8 +1,8 @@
 # Browser Network Recorder
 
-轻量浏览器网络录制工具，支持 **macOS（Apple Silicon / Intel）和 Windows**。打开独立 Chrome，手动登录、操作网页，将多个标签页的 HTTP 请求、响应和 WebSocket 帧录制为 JSONL，供接口排查、脚本处理和 AI 辅助分析使用。
+轻量浏览器网络录制工具，支持 **macOS（Apple Silicon / Intel）和 Windows**。打开独立的浏览器窗口（macOS 支持 Chrome，Windows 支持 Edge 和 Chrome），手动登录、操作网页，将多个标签页的 HTTP 请求、响应和 WebSocket 帧录制为 JSONL，供接口排查、脚本处理和 AI 辅助分析使用。
 
-A standalone desktop recorder for Chrome on macOS and Windows. Manually browse a site and capture multi-tab HTTP requests, response bodies, and WebSocket frames as local JSONL files. Built with Python, Tkinter, Selenium and Chrome DevTools Protocol.
+A standalone desktop recorder for Chrome on macOS and for Microsoft Edge or Chrome on Windows. Manually browse a site and capture multi-tab HTTP requests, response bodies, and WebSocket frames as local JSONL files. Built with Python, Tkinter, Selenium and Chrome DevTools Protocol.
 
 [![Tests](https://github.com/shr186662-sys/browser-network-recorder/actions/workflows/test.yml/badge.svg)](https://github.com/shr186662-sys/browser-network-recorder/actions/workflows/test.yml)
 
@@ -27,11 +27,11 @@ A standalone desktop recorder for Chrome on macOS and Windows. Manually browse a
 | Intel Mac | `BrowserNetworkRecorder-mac-intel.zip` | `BrowserNetworkRecorder.app` |
 | Windows x64 | `BrowserNetworkRecorder-windows-x64.zip` | 文件夹内 `BrowserNetworkRecorder.exe` |
 
-桌面包包含 Python 运行时与第三方依赖，仍需安装 Google Chrome，首次启动驱动需要联网。桌面构建未购买签名证书、未做 Apple 公证，系统可能阻止直接打开；不要全局关闭系统安全保护。如果无法通过系统允许的方式打开，可以使用下面的源码方式。桌面包由 GitHub Actions 按平台构建，具体构建结果以 Releases 和 Actions 为准。
+桌面包包含 Python 运行时与第三方依赖，macOS 需要安装 Google Chrome，Windows 需要安装 Microsoft Edge 或 Google Chrome。首次自动下载驱动需要联网。桌面构建未购买签名证书、未做 Apple 公证，系统可能阻止直接打开；不要全局关闭系统安全保护。如果无法通过系统允许的方式打开，可以使用下面的源码方式。桌面包由 GitHub Actions 按平台构建，具体构建结果以 Releases 和 Actions 为准。
 
 ## 源码启动
 
-准备 Google Chrome 和 **Python 3.11 或以上（含 Tkinter，推荐 python.org 安装包）**。下载本仓库 ZIP 后先解压到可写目录。源码启动第一次会联网从 PyPI 安装 `requirements.txt` 到本目录 `.venv`。
+准备对应平台支持的浏览器和 **Python 3.11 或以上（含 Tkinter，推荐 python.org 安装包）**。下载本仓库 ZIP 后先解压到可写目录。源码启动第一次会联网从 PyPI 安装 `requirements.txt` 到本目录 `.venv`。
 
 ### macOS
 
@@ -64,15 +64,15 @@ macOS 的系统命令可能是 `python3`。依赖均为公开 Python 包：Selen
 
 ## 使用
 
-1. 点击「启动 Chrome」，等待驱动准备完成。
+1. Windows 检测到已安装的 Edge 时默认选中 Edge，也可在下拉框选择 Chrome。点击「启动浏览器」，等待驱动匹配、下载并启动浏览器。
 2. 设置筛选和脱敏选项，点击「开始监听」。**监听开始之后**再进行待录制操作。
-3. 在工具新开的 Chrome 中手动登录并操作网页；允许打开新标签页。
+3. 在工具新开的浏览器中手动登录并操作网页；允许打开新标签页。
 4. 等待请求完成，点击「结束监听」，再打开输出目录。
 5. 需要导出 JS/CSS 时，在原始模式下用「全部」或对应类型录制，然后结束监听并点击「导出 JS/CSS」。
 
 筛选和脱敏设置在每次开始时固定，运行中修改筛选将在下一次录制生效。停止时会等待已接收事件处理完毕，大量请求时可能需要等待。
 
-录制浏览器使用独立临时配置，**不会复用日常 Chrome 的登录状态**。程序只监听自己启动的浏览器，不监听手机、其他桌面应用或整个系统。
+录制浏览器使用独立临时配置，**不会复用日常浏览器的登录状态**。程序只监听自己启动的浏览器，不监听手机、其他桌面应用或整个系统。
 
 ## 输出
 
@@ -98,21 +98,21 @@ assets/            手动导出的 JS/CSS 和 manifest.json
 - 默认将 URL 查询值、片段、用户信息，以及非常用请求/响应头隐藏；JSON 正文递归隐藏常见凭据和个人信息字段；表单隐藏全部值。
 - 默认省略非 JSON 正文和 WebSocket 载荷。需要完整正文、JS/CSS 或无损二进制时，在开始前取消脱敏。原始录制可能包含密码、Cookie、Token、客户资料等，应只保存在受控环境。
 - **脱敏是尽力处理，不是匿名化保证。** URL 路径、自定义 JSON 字段及自由文本仍可能包含敏感信息。分享给他人、AI 服务或提交 Issue 前，必须人工检查；不要上传真实登录会话。
-- 本工具不主动上传录制内容，也不向作者发送录制数据。浏览器会访问你打开的网站；pip 和 Selenium Manager 会访问包/驱动分发服务。程序默认关闭 Selenium Manager 使用统计；其他依赖和 Chrome 行为由相应软件控制。
+- 本工具不主动上传录制内容，也不向作者发送录制数据。浏览器会访问你打开的网站；pip 和 Selenium Manager 会访问包/驱动分发服务。程序默认关闭 Selenium Manager 使用统计；其他依赖和浏览器行为由相应软件控制。
 - 只在有权访问和调试的环境使用；工具不提供验证码破解、自动登录或访问权限绕过。
 
 ## 已知限制
 
 - 新标签页约每 0.5 秒发现一次；接入前的最早请求可能漏录，需等待接入日志后刷新或重做操作。
 - 无法恢复开始监听前的请求/帧。已存在 WebSocket 可能录到帧但没有 URL；不覆盖 Worker、Service Worker 或子框架独立目标的全部流量。
-- HTTP 正文最多保存 500,000 字符，超出会标记截断；响应正文可能因缓存、标签页关闭或 Chrome 回收而读取失败；重定向中间响应不保证有正文。
+- HTTP 正文最多保存 500,000 字符，超出会标记截断；响应正文可能因缓存、标签页关闭或浏览器回收而读取失败；重定向中间响应不保证有正文。
 - 目前 JSONL 导出，不提供 HAR、请求回放、瀑布图或协议层完整抓包。二进制 HTTP 正文按文本尽力解码；只有原始 WebSocket 二进制载荷保证按 CDP Base64 保存。
 - 登录分析依赖关键词和请求类型，可能漏录；完整排查请用「全部」。JS/CSS 导出只包含已录制且可读取的正文，可能被截断，并不保证资源可独立运行。
 - 自动化测试不等于每个系统版本的人工验收；请在自己设备上先用测试页面验证。
 
 ## 网络与自定义路径
 
-初次驱动下载和 Chrome 大版本更新需要访问官方驱动分发服务。下载时会读取系统 HTTP/HTTPS 代理；此设置只用于驱动准备，不强行设置 Chrome 代理。CDP 的本机 HTTP 连接不经过环境代理。
+首次下载驱动或浏览器升级后，需要访问官方驱动分发服务。匹配后的驱动会缓存到当前用户目录。驱动下载会读取系统 HTTP/HTTPS 代理，浏览器继续使用自己的代理设置。CDP 的本机 HTTP 连接不经过环境代理。
 
 可选环境变量：
 
@@ -121,6 +121,8 @@ assets/            手动导出的 JS/CSS 和 manifest.json
 | `NETWORK_RECORDER_OUTPUT` | 录制输出目录 |
 | `NETWORK_RECORDER_CHROME` | 自定义 Chrome 可执行文件路径 |
 | `NETWORK_RECORDER_DRIVER` | 已下载且与 Chrome 匹配的 chromedriver 路径，用于离线环境 |
+| `NETWORK_RECORDER_EDGE` | Windows 上自定义 Edge 可执行文件路径 |
+| `NETWORK_RECORDER_EDGE_DRIVER` | 已下载且与 Edge 匹配的 msedgedriver.exe 路径，用于离线环境 |
 | `NETWORK_RECORDER_PYTHON` | 源码启动器使用的 Python 可执行文件路径 |
 
 不要将驱动的调试端口开放给其他机器。
@@ -136,9 +138,9 @@ python build.py
 
 构建结果位于 `dist/`。GitHub Actions 在 Mac、Windows、Linux 上执行单元测试；推送 `v*` 标签分别构建 Apple Silicon、Intel Mac 和 Windows x64 桌面包，全部成功后发布 Release。
 
-真实 Chrome 集成测试需要额外安装 `websockets`，并设置 `RECORDER_INTEGRATION=1` 后运行测试。测试只使用本机人工构造的 HTTP/WebSocket 服务，不登录业务网站。
+真实浏览器集成测试覆盖 Chrome 和 Windows Edge，需要额外安装 `websockets`，并设置 `RECORDER_INTEGRATION=1` 后运行测试。测试只使用本机人工构造的 HTTP/WebSocket 服务，不登录业务网站。
 
-欢迎提交包含复现步骤、系统/Python/Chrome 版本的 Issue，请使用测试域名和人工数据。
+欢迎提交包含复现步骤、系统、Python 和浏览器版本的 Issue，请使用测试域名和人工数据。
 
 ## License
 

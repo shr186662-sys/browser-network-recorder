@@ -81,6 +81,56 @@ class RecorderTests(unittest.TestCase):
 
 
 class DriverTests(unittest.TestCase):
+    def test_windows_edge_uses_matching_driver_for_detected_browser(self):
+        with tempfile.TemporaryDirectory() as folder:
+            edge_binary = Path(folder) / 'Microsoft' / 'Edge' / 'Application' / 'msedge.exe'
+            edge_binary.parent.mkdir(parents=True)
+            edge_binary.touch()
+            driver_path = str(Path(folder) / 'msedgedriver.exe')
+            app = object.__new__(capture.NetworkCaptureApp)
+            app._log = lambda _: None
+            with (
+                patch.dict(capture.os.environ, {'LOCALAPPDATA': folder, 'NETWORK_RECORDER_DRIVER': 'chromedriver'}, clear=True),
+                patch.object(capture, 'getproxies', return_value={'https': 'proxy.test:8080'}),
+                patch('selenium.webdriver.common.selenium_manager.SeleniumManager.binary_paths',
+                      return_value={'driver_path': driver_path}) as manager,
+                patch('selenium.webdriver.Edge') as edge,
+            ):
+                edge.return_value.capabilities = {'ms:edgeOptions': {'debuggerAddress': 'localhost:9223'}}
+                self.assertIs(app._create_driver('Edge'), edge.return_value)
+                manager.assert_called_once_with([
+                    '--browser', 'edge', '--avoid-browser-download', '--skip-driver-in-path',
+                    '--proxy', 'proxy.test:8080', '--browser-path', str(edge_binary),
+                ])
+                self.assertEqual(edge.call_args.kwargs['options'].binary_location, str(edge_binary))
+                self.assertEqual(edge.call_args.kwargs['service'].path, driver_path)
+                self.assertEqual(app._debugger_address, 'localhost:9223')
+
+    def test_edge_driver_override_works_offline(self):
+        app = object.__new__(capture.NetworkCaptureApp)
+        app._log = lambda _: None
+        with (
+            patch.dict(capture.os.environ, {'NETWORK_RECORDER_EDGE_DRIVER': 'offline/msedgedriver.exe'}, clear=True),
+            patch.object(capture, 'find_windows_edge', return_value='msedge.exe'),
+            patch('selenium.webdriver.common.selenium_manager.SeleniumManager.binary_paths') as manager,
+            patch('selenium.webdriver.Edge') as edge,
+        ):
+            edge.return_value.capabilities = {'ms:edgeOptions': {'debuggerAddress': 'localhost:9223'}}
+            app._create_driver('Edge')
+            self.assertEqual(edge.call_args.kwargs['service'].path, 'offline/msedgedriver.exe')
+            manager.assert_not_called()
+
+    def test_missing_edge_does_not_download_a_browser(self):
+        app = object.__new__(capture.NetworkCaptureApp)
+        with (
+            patch.dict(capture.os.environ, {}, clear=True),
+            patch.object(capture.shutil, 'which', return_value=None),
+            patch('selenium.webdriver.common.selenium_manager.SeleniumManager.binary_paths') as manager,
+        ):
+            with self.assertRaisesRegex(RuntimeError, '未找到 Microsoft Edge'):
+                app._create_driver('Edge')
+            manager.assert_not_called()
+
     def test_windows_and_mac_are_independent_of_private_downloader(self):
         for platform in ('win32', 'darwin'):
             with self.subTest(platform=platform), patch.object(capture.sys, 'platform', platform), patch.object(capture.Path, 'is_file', return_value=True), patch.object(capture, 'getproxies', return_value={}), patch('selenium.webdriver.Chrome') as chrome:

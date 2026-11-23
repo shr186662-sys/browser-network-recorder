@@ -21,7 +21,7 @@ pause
 exit /b 1
 :done
 if errorlevel 1 (
-    echo Launch failed. Check Python/Tkinter, Chrome and network. See README.md.
+    echo Launch failed. Check Python/Tkinter, Microsoft Edge or Chrome, and network. See README.md.
     pause
     exit /b 1
 )

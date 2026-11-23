@@ -1,7 +1,8 @@
-"""Opt-in integration test against local synthetic services and a real Chrome."""
+"""Opt-in integration tests against local synthetic services and real browsers."""
 import base64
 import json
 import os
+import sys
 import tempfile
 import threading
 import time
@@ -13,10 +14,20 @@ from unittest.mock import patch
 import network_capture as capture
 
 
-@unittest.skipUnless(os.environ.get('RECORDER_INTEGRATION') == '1', 'set RECORDER_INTEGRATION=1 for real Chrome test')
-class ChromeIntegration(unittest.TestCase):
-    def test_multitab_http_websocket_and_files(self):
+@unittest.skipUnless(os.environ.get('RECORDER_INTEGRATION') == '1', 'set RECORDER_INTEGRATION=1 for browser tests')
+class BrowserIntegration(unittest.TestCase):
+    def test_chrome_multitab_http_websocket_and_files(self):
         from selenium.webdriver.chrome.options import Options
+
+        self._check_multitab_capture('Chrome', Options, 'selenium.webdriver.chrome.options.Options')
+
+    @unittest.skipUnless(sys.platform == 'win32', 'Edge integration requires Windows')
+    def test_edge_multitab_http_websocket_and_files(self):
+        from selenium.webdriver.edge.options import Options
+
+        self._check_multitab_capture('Edge', Options, 'selenium.webdriver.edge.options.Options')
+
+    def _check_multitab_capture(self, browser, options_class, options_target):
         from websockets.sync.server import serve
 
         class Handler(BaseHTTPRequestHandler):
@@ -46,10 +57,10 @@ class ChromeIntegration(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             app = object.__new__(capture.NetworkCaptureApp)
             app._log = lambda _: None
-            opts = Options()
+            opts = options_class()
             opts.add_argument('--headless=new')
-            with patch('selenium.webdriver.chrome.options.Options', return_value=opts):
-                driver = app._create_driver()
+            with patch(options_target, return_value=opts):
+                driver = app._create_driver(browser)
             self.addCleanup(driver.quit)
             driver.get(url)
             monitor = capture.MultiTabNetworkMonitor(app._debugger_address)

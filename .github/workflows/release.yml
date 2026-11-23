@@ -61,4 +61,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh release create "$GITHUB_REF_NAME" artifacts/*.zip --title "$GITHUB_REF_NAME" --notes "Standalone desktop builds for macOS and Windows. Chrome and internet for initial driver setup are required. Builds are unsigned. See README for privacy and compatibility limitations."
+          gh release create "$GITHUB_REF_NAME" artifacts/*.zip --title "$GITHUB_REF_NAME" --notes "Standalone desktop builds for Chrome on macOS and Chrome or Microsoft Edge on Windows. Internet access is required for initial driver setup. Builds are unsigned. See README for privacy and compatibility limitations."

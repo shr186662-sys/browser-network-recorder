@@ -1,10 +1,10 @@
 """
-浏览器网络请求录制工具（Chrome + Selenium）。
+浏览器网络请求录制工具（Chrome、Windows Edge + Selenium）。
 
 用法：
   python network_capture.py
 
-1. 点击「启动 Chrome」打开浏览器
+1. 点击「启动浏览器」打开 Chrome 或 Edge
 2. 配置筛选（类似 DevTools Network 面板），或点击「启用登录分析模式」一键过滤
 3. 点击「开始监听」记录符合条件的网络请求和 WebSocket 收发帧
 4. 在浏览器中手动操作
@@ -20,6 +20,7 @@ import base64
 import json
 import os
 import queue
+import shutil
 import sys
 import threading
 import time
@@ -332,11 +333,24 @@ class MultiTabNetworkMonitor:
 
 def resolve_debugger_address(driver) -> str:
     caps = driver.capabilities or {}
-    chrome_opts = caps.get("goog:chromeOptions") or {}
-    debugger_address = chrome_opts.get("debuggerAddress")
-    if not debugger_address:
-        raise RuntimeError("无法获取 Chrome debuggerAddress")
-    return str(debugger_address)
+    for key in ("ms:edgeOptions", "goog:chromeOptions"):
+        debugger_address = (caps.get(key) or {}).get("debuggerAddress")
+        if debugger_address:
+            return str(debugger_address)
+    raise RuntimeError("无法获取浏览器的 CDP 调试地址")
+
+
+def find_windows_edge() -> str | None:
+    override = os.environ.get("NETWORK_RECORDER_EDGE")
+    if override:
+        return override if Path(override).is_file() else None
+    for variable in ("PROGRAMFILES(X86)", "PROGRAMFILES", "LOCALAPPDATA"):
+        directory = os.environ.get(variable)
+        if directory:
+            candidate = Path(directory) / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+            if candidate.is_file():
+                return str(candidate)
+    return shutil.which("msedge.exe")
 
 
 def classify_request(record: dict[str, Any]) -> str:
@@ -495,7 +509,14 @@ class NetworkCaptureApp:
         toolbar = ttk.Frame(self.root, padding=8)
         toolbar.pack(fill=tk.X)
 
-        ttk.Button(toolbar, text="启动 Chrome", command=self._start_browser).pack(side=tk.LEFT, padx=4)
+        default_browser = "Edge" if sys.platform == "win32" and find_windows_edge() else "Chrome"
+        self.browser_var = tk.StringVar(value=default_browser)
+        if sys.platform == "win32":
+            ttk.Combobox(
+                toolbar, textvariable=self.browser_var, values=("Edge", "Chrome"),
+                state="readonly", width=8,
+            ).pack(side=tk.LEFT, padx=4)
+        ttk.Button(toolbar, text="启动浏览器", command=self._start_browser).pack(side=tk.LEFT, padx=4)
         self.start_btn = ttk.Button(toolbar, text="开始监听", command=self._start_recording, state=tk.DISABLED)
         self.start_btn.pack(side=tk.LEFT, padx=4)
         self.stop_btn = ttk.Button(toolbar, text="结束监听", command=self._stop_recording, state=tk.DISABLED)
@@ -576,7 +597,7 @@ class NetworkCaptureApp:
 
         status_frame = ttk.LabelFrame(self.root, text="状态", padding=8)
         status_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
-        self.status_var = tk.StringVar(value="请先启动 Chrome")
+        self.status_var = tk.StringVar(value="请先启动浏览器")
         ttk.Label(status_frame, textvariable=self.status_var).pack(anchor=tk.W)
         self.session_var = tk.StringVar(value="输出目录：—")
         ttk.Label(status_frame, textvariable=self.session_var, foreground="#666666").pack(anchor=tk.W, pady=(4, 0))
@@ -694,18 +715,19 @@ class NetworkCaptureApp:
             return
 
         url = self.url_var.get().strip() or "about:blank"
+        browser = self.browser_var.get()
         self._browser_starting = True
 
         def work() -> None:
             driver = None
             try:
-                self._set_status("正在启动 Chrome…")
-                driver = self._create_driver()
+                self._set_status(f"正在启动 {browser}…")
+                driver = self._create_driver(browser)
                 driver.get(url)
                 self._driver = driver
-                self._set_status("Chrome 已启动，可点击「开始监听」")
+                self._set_status(f"{browser} 已启动，可点击「开始监听」")
                 self.root.after(0, lambda: self.start_btn.config(state=tk.NORMAL))
-                self._log(f"Chrome 已启动，当前页：{url}")
+                self._log(f"{browser} 已启动，当前页：{url}")
             except Exception as exc:
                 self._set_status(f"启动失败：{exc}")
                 self._log(f"启动失败：{exc}")
@@ -717,41 +739,68 @@ class NetworkCaptureApp:
 
         threading.Thread(target=work, name="capture-start-browser", daemon=True).start()
 
-    def _create_driver(self):
+    def _create_driver(self, browser: str = "Chrome"):
         from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.chrome.service import Service
         from selenium.webdriver.common.selenium_manager import SeleniumManager
 
         os.environ.setdefault("SE_AVOID_STATS", "true")
+        if browser == "Edge":
+            from selenium.webdriver.edge.options import Options
+            from selenium.webdriver.edge.service import Service
+
+            binary = find_windows_edge()
+            if not binary:
+                if os.environ.get("NETWORK_RECORDER_EDGE"):
+                    raise RuntimeError("NETWORK_RECORDER_EDGE 指定的 Edge 程序不存在，请检查路径。")
+                raise RuntimeError("未找到 Microsoft Edge，请安装 Edge 后重试，或选择 Chrome。")
+            launch = webdriver.Edge
+            manager_args = ["--browser", "edge", "--avoid-browser-download", "--skip-driver-in-path"]
+            driver_override = os.environ.get("NETWORK_RECORDER_EDGE_DRIVER")
+        else:
+            from selenium.webdriver.chrome.options import Options
+            from selenium.webdriver.chrome.service import Service
+
+            launch = webdriver.Chrome
+            manager_args = ["--browser", "chrome"]
+            driver_override = os.environ.get("NETWORK_RECORDER_DRIVER")
+            binary = os.environ.get("NETWORK_RECORDER_CHROME")
+            if not binary and sys.platform == "darwin":
+                candidates = [
+                    Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+                    Path.home() / "Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                ]
+                chrome = next((path for path in candidates if path.is_file()), None)
+                if chrome is None:
+                    raise RuntimeError("未找到 Chrome，请安装 Google Chrome 后重试。")
+                binary = str(chrome)
+
         options = Options()
         options.add_argument("--window-size=1400,900")
-        chrome_override = os.environ.get("NETWORK_RECORDER_CHROME")
-        if chrome_override:
-            options.binary_location = chrome_override
-        elif sys.platform == "darwin":
-            candidates = [
-                Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
-                Path.home() / "Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            ]
-            chrome = next((path for path in candidates if path.is_file()), None)
-            if chrome is None:
-                raise RuntimeError("未找到 Chrome，请安装 Google Chrome 后重试。")
-            options.binary_location = str(chrome)
-        self._log("正在匹配 Chrome 驱动，首次启动需要联网，请稍候…")
-        driver_override = os.environ.get("NETWORK_RECORDER_DRIVER")
+        if binary:
+            options.binary_location = binary
+        self._log(f"正在匹配 {browser} 驱动，首次启动需要联网，请稍候…")
         if driver_override:
-            driver = webdriver.Chrome(service=Service(executable_path=driver_override), options=options)
+            driver = launch(service=Service(executable_path=driver_override), options=options)
         else:
-            proxy = getproxies().get("https") or getproxies().get("http")
-            if proxy:
-                args = ["--browser", "chrome", "--proxy", proxy]
-                if options.binary_location:
-                    args += ["--browser-path", options.binary_location]
-                paths = SeleniumManager().binary_paths(args)
-                driver = webdriver.Chrome(service=Service(executable_path=paths["driver_path"]), options=options)
+            proxies = getproxies()
+            proxy = proxies.get("https") or proxies.get("http")
+            if browser == "Edge" or proxy:
+                if proxy:
+                    manager_args += ["--proxy", proxy]
+                if binary:
+                    manager_args += ["--browser-path", binary]
+                try:
+                    paths = SeleniumManager().binary_paths(manager_args)
+                except Exception as exc:
+                    if browser == "Edge":
+                        raise RuntimeError(
+                            "无法准备 Edge 驱动。请检查网络或代理，"
+                            "也可通过 NETWORK_RECORDER_EDGE_DRIVER 指定匹配的 msedgedriver.exe。"
+                        ) from exc
+                    raise
+                driver = launch(service=Service(executable_path=paths["driver_path"]), options=options)
             else:
-                driver = webdriver.Chrome(options=options)
+                driver = launch(options=options)
         try:
             driver.set_page_load_timeout(120)
             self._debugger_address = resolve_debugger_address(driver)
@@ -763,7 +812,7 @@ class NetworkCaptureApp:
 
     def _navigate(self) -> None:
         if not self._driver:
-            messagebox.showwarning("提示", "请先启动 Chrome")
+            messagebox.showwarning("提示", "请先启动浏览器")
             return
         url = self.url_var.get().strip()
         if not url:
@@ -776,7 +825,7 @@ class NetworkCaptureApp:
 
     def _start_recording(self) -> None:
         if not self._driver:
-            messagebox.showwarning("提示", "请先启动 Chrome")
+            messagebox.showwarning("提示", "请先启动浏览器")
             return
         if self._recording.is_set():
             return
